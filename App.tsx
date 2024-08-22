@@ -1,117 +1,124 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
+import { View, Text, PermissionsAndroid, Alert, Linking, TouchableOpacity, StyleSheet } from 'react-native'
+import React, { useState, useEffect } from 'react'
+import Geolocation from '@react-native-community/geolocation';
 
-import React from 'react';
-import type {PropsWithChildren} from 'react';
-import {
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  useColorScheme,
-  View,
-} from 'react-native';
-
-import {
-  Colors,
-  DebugInstructions,
-  Header,
-  LearnMoreLinks,
-  ReloadInstructions,
-} from 'react-native/Libraries/NewAppScreen';
-
-type SectionProps = PropsWithChildren<{
-  title: string;
-}>;
-
-function Section({children, title}: SectionProps): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
-  return (
-    <View style={styles.sectionContainer}>
-      <Text
-        style={[
-          styles.sectionTitle,
-          {
-            color: isDarkMode ? Colors.white : Colors.black,
-          },
-        ]}>
-        {title}
-      </Text>
-      <Text
-        style={[
-          styles.sectionDescription,
-          {
-            color: isDarkMode ? Colors.light : Colors.dark,
-          },
-        ]}>
-        {children}
-      </Text>
-    </View>
-  );
+interface Location {
+  latitude: number;
+  longitude: number;
 }
 
-function App(): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
+const App = () => {
+  const [currentLocation, setCurrentLocation] = useState<Location | null>(null);
 
-  const backgroundStyle = {
-    backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
+  useEffect(() => {
+     // Set configuration for Geolocation
+    Geolocation.setRNConfiguration({
+      skipPermissionRequests: false,
+      authorizationLevel: 'whenInUse', // iOS-only, optional
+      enableBackgroundLocationUpdates: true, // iOS-only, optional
+      locationProvider: 'auto', // Android-only, optional
+    });
+
+    requestPermission().then(() => {
+      getCurrentLocation();
+    });
+  }, []);
+
+  const requestPermission = async () => {
+    try {
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+        {
+          title: 'Geo App',
+          message: 'Geo App quer acessar Localização',
+          buttonNeutral: 'Pergunte Depois',
+          buttonNegative: 'Cancelar',
+          buttonPositive: 'Permitir',
+        },
+      );
+
+      if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+        Alert.alert('Permissão negada', 'Sem permissão para acessar localização.');
+      }
+    } catch (err) {
+      console.warn(err);
+    }
+  };
+
+  const getCurrentLocation = () => {
+    Geolocation.getCurrentPosition(
+      pos => {
+        const { latitude, longitude } = pos.coords;
+        setCurrentLocation({ latitude, longitude });
+      },
+      error => {
+        console.warn('Erro', error.message);
+        Alert.alert('Erro', 'Não foi possível obter a localização.');
+      }
+    );
+  };
+
+  const openMaps = async () => {
+    if (currentLocation) {
+      const { latitude, longitude } = currentLocation;
+      const url = `http://maps.google.com/maps?q=${latitude},${longitude}`;
+  
+      console.log('Attempting to open URL:', url); // Log the URL for debugging
+  
+      try {
+        await Linking.openURL(url);
+      } catch (error) {
+        console.error('Erro ao abrir o URL:', error);
+        Alert.alert('Erro', 'Ocorreu um erro ao tentar abrir o URL.');
+      }
+    } else {
+      Alert.alert('Local não disponível', 'Não há localização atual para mostrar no mapa.');
+    }
   };
 
   return (
-    <SafeAreaView style={backgroundStyle}>
-      <StatusBar
-        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={backgroundStyle.backgroundColor}
-      />
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        style={backgroundStyle}>
-        <Header />
-        <View
-          style={{
-            backgroundColor: isDarkMode ? Colors.black : Colors.white,
-          }}>
-          <Section title="Step One">
-            Edit <Text style={styles.highlight}>App.tsx</Text> to change this
-            screen and then come back to see your edits.
-          </Section>
-          <Section title="See Your Changes">
-            <ReloadInstructions />
-          </Section>
-          <Section title="Debug">
-            <DebugInstructions />
-          </Section>
-          <Section title="Learn More">
-            Read the docs to discover what to do next:
-          </Section>
-          <LearnMoreLinks />
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+    <View style={styles.container}>
+      <Text style={styles.header}>Coordenadas</Text>
+      <View style={styles.coordinatesContainer}>
+        <Text style={styles.coordinateText}>Latitude: {currentLocation ? currentLocation.latitude.toFixed(6) : 'carregando..'}</Text>
+        <Text style={styles.coordinateText}>Longitude: {currentLocation ? currentLocation.longitude.toFixed(6) : 'carregando..'}</Text>
+      </View>
+      <TouchableOpacity style={styles.button} onPress={currentLocation ? openMaps : requestPermission}>
+        <Text style={styles.buttonText}>{currentLocation ? 'Abrir no Maps' : 'Obter Localização'}</Text>
+      </TouchableOpacity>
+    </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
-  sectionContainer: {
-    marginTop: 32,
-    paddingHorizontal: 24,
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#f5f5f5',
   },
-  sectionTitle: {
+  header: {
     fontSize: 24,
-    fontWeight: '600',
+    fontWeight: 'bold',
+    marginBottom: 20,
+    color: '#333',
   },
-  sectionDescription: {
-    marginTop: 8,
+  coordinatesContainer: {
+    marginBottom: 20,
+  },
+  coordinateText: {
     fontSize: 18,
-    fontWeight: '400',
+    color: '#666',
   },
-  highlight: {
-    fontWeight: '700',
+  button: {
+    backgroundColor: '#007bff',
+    padding: 10,
+    borderRadius: 5,
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 18,
   },
 });
 
