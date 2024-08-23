@@ -1,6 +1,7 @@
 import { View, Text, PermissionsAndroid, Alert, TouchableOpacity, StyleSheet, Platform } from 'react-native'
 import React, { useState, useEffect } from 'react'
 import Geolocation from '@react-native-community/geolocation';
+import BackgroundService from 'react-native-background-actions';
 
 interface Response {
   coords: {
@@ -37,7 +38,11 @@ const App = () => {
     });
 
     requestPermission().then(() => {
-      watchPosition();
+      try {
+        startBackgroundService();
+      } catch (e) {
+        console.warn(e);
+      }
     });
   }, []);
 
@@ -82,6 +87,26 @@ const App = () => {
       console.warn(err);
     }
   };
+
+  const sendLocationToServer = async (latitude: number, longitude: number) => {
+    try {
+      const response = await fetch('https://your-server-endpoint.com/location', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify([
+          latitude,
+          longitude,
+        ]),
+      });
+
+      const data = await response.json();
+      console.log('Server response:', data);
+    } catch (error) {
+      console.error('Error sending location to server:', error);
+    }
+  };
   
   const watchPosition = () => {
     try {
@@ -89,6 +114,7 @@ const App = () => {
             (position) => {
               console.log('watchPosition', position.coords.altitude, position.coords.latitude);
               setCurrentLocation(position);
+              sendLocationToServer(position.coords.latitude, position.coords.longitude);
             },
             (error) => {
               console.log('WatchPosition Error', JSON.stringify(error))
@@ -114,33 +140,47 @@ const App = () => {
     setError(null);
   };
 
+  const startBackgroundService = async () => {
+    const sleep = (time: any) => new Promise<void>((resolve) => setTimeout(() => resolve(), time));
+
+    const veryIntensiveTask = async (_taskDataArguments: any) => {
+      const { delay } = _taskDataArguments;
+      await new Promise<void>(async (resolve) => {
+        watchPosition(); // Start watching location in background
+        while (BackgroundService.isRunning()) {
+          console.log('Background service running');
+          await sleep(delay);
+        }
+        resolve();
+      });
+    };
+
+    const options = {
+      taskName: 'LocationTracking',
+      taskTitle: 'Tracking Location in Background',
+      taskDesc: 'App is tracking location in the background',
+      taskIcon: {
+          name: 'ic_launcher',
+          type: 'mipmap',
+      },
+      color: '#ff00ff',
+      linkingURI: 'yourSchemeHere://chat/jane', // See Deep Linking for more info
+      parameters: {
+          delay: 300000,
+      },
+  };
+
+    await BackgroundService.start(veryIntensiveTask, options);
+    await BackgroundService.updateNotification({taskDesc: 'App is tracking location in the background'});
+
+    BackgroundService.on('expiration', () => {
+      console.log('I am being closed :(');
+  });
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.header}>Coordenadas</Text>
-      { currentLocation ? (
-      <View style={styles.coordinatesContainer}>
-        <Text style={styles.coordinateText}>Latitude: {currentLocation.coords.latitude}</Text>
-        <Text style={styles.coordinateText}>Longitude: {currentLocation.coords.longitude}</Text>
-      </View>
-      ) : (
-      <View style={styles.coordinatesContainer}>
-        <Text style={styles.coordinateText}>Carregando... {error?.code}</Text>
-      </View>
-      )
-      }
-      {
-        subscriptionId ? (
-            <TouchableOpacity style={styles.button} onPress={clearWatch}>
-                <Text>Limpar</Text>
-            </TouchableOpacity>
-        ) : (
-            <TouchableOpacity style={styles.button} onPress={watchPosition}>
-                <Text>Watch</Text>
-            </TouchableOpacity>
-        )
-      }
-      <View>
-    </View>
     </View>
   );
 };
